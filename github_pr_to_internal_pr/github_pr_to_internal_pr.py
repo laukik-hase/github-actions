@@ -226,9 +226,9 @@ def main():
     project_gl = gl.projects.get(project_fullname)
 
     if pr_label == LABEL_REBASE:
-        sync_pr(project_name, pr_num, pr_branch, pr_commit_id, project_html_url, pr_html_url, rebase_flag=True)
+        sync_pr(project_name, pr_num, pr_branch, pr_commit_id, project_html_url, project_gl, pr_html_url, rebase_flag=True)
     elif pr_label == LABEL_MERGE:
-        sync_pr(project_name, pr_num, pr_branch, pr_commit_id, project_html_url, pr_html_url, rebase_flag=False)
+        sync_pr(project_name, pr_num, pr_branch, pr_commit_id, project_html_url, project_gl, pr_html_url, rebase_flag=False)
     elif pr_label == LABEL_UPDATE:
         check_update_label(pr_label, pr_labels_list)
         update_mr(project_name, pr_num, pr_branch, pr_commit_id, project_html_url, project_gl)
