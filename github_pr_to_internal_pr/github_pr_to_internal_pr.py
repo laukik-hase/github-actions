@@ -26,7 +26,7 @@ def pr_check_approver(pr_creator, pr_comments_url, pr_approve_labeller):
         if comment_body.startswith('sha=') and comment['user']['login'] == pr_approve_labeller != pr_creator:
                 return comment_body[4 : ]
 
-    raise SystemError("PR Comment Error: Ensure that Command comment exists and PR commenter and labeller match!")
+    raise Exception("PR Comment Error: Ensure that Command comment exists and PR commenter and labeller match!")
 
 
 def pr_check_forbidden_files(pr_files_url):
@@ -40,7 +40,7 @@ def pr_check_forbidden_files(pr_files_url):
     pr_files = [file_info['filename'] for file_info in r_data
                 if (file_info['filename']).find('.gitlab') != -1 or (file_info['filename']).find('.github') != -1]
     if pr_files:
-        raise SystemError("PR modifying forbidden files!!!")
+        raise Exception("PR modifying forbidden files!!!")
 
 
 def get_github_remote(project_html_url):
@@ -64,6 +64,7 @@ def setup_project(project_fullname):
     HDR_LEN = 8
     gl_project_url = GITLAB_URL[: HDR_LEN] + GITLAB_TOKEN + ':' + GITLAB_TOKEN + '@' + GITLAB_URL[HDR_LEN :] + '/' + project_fullname + '.git'
 
+    print('Cloning repository...')
     Git(".").clone(gl_project_url, recursive=True)
     return gl
 
@@ -80,7 +81,7 @@ def check_remote_branch(project, pr_branch):
         if ret != None:
             return
 
-    raise SystemError("PR branch creation failed!")
+    raise Exception("PR branch creation failed!")
 
 
 def check_update_label(pr_label, pr_labels_list):
@@ -91,14 +92,15 @@ def check_update_label(pr_label, pr_labels_list):
             if label['name'] == LABEL_MERGE or label['name'] == LABEL_REBASE]
 
     if not label_validity:
-        raise SystemError('PR-Sync-Update Label: Illegal use!')
+        raise Exception('PR-Sync-Update Label: Illegal use!')
 
 
 # Update existing MR
 def update_mr(project_name, pr_num, pr_branch, pr_commit_id, project_html_url, project_gl):
-    branch = project_gl.branches.get(pr_branch)
-    if not branch:
-        raise SystemError("PR Update: No branch found on internal remote to update!")
+    try:
+        project_gl.branches.get(pr_branch)
+    except:
+        raise Exception("PR Update: No branch found on internal remote to update!")
 
     GITHUB_REMOTE_NAME = 'github'
     gh_remote = get_github_remote(project_html_url)
@@ -108,8 +110,8 @@ def update_mr(project_name, pr_num, pr_branch, pr_commit_id, project_html_url, p
     git.remote('add', GITHUB_REMOTE_NAME, gh_remote)
     git.checkout(pr_branch)
 
-    print('Checking out to master...')
-    git.checkout('master')
+    print('Checking out to test_master...')
+    git.checkout('test_master')
 
     print('Updating the PR branch...')
     git.branch('--delete', pr_branch)
@@ -120,7 +122,7 @@ def update_mr(project_name, pr_num, pr_branch, pr_commit_id, project_html_url, p
     expected_commit_id = git.rev_parse('--short', 'HEAD')
 
     if not pr_commit_id.startswith(expected_commit_id):
-        raise SystemError("PR Commit SHA1 in workflow comment and user branch do not match!")
+        raise Exception("PR Commit SHA1 in workflow comment and user branch do not match!")
 
     print('Pushing to remote...')
     git.push('--force', 'origin', pr_branch)
@@ -128,17 +130,20 @@ def update_mr(project_name, pr_num, pr_branch, pr_commit_id, project_html_url, p
 
 # Merge PRs with/without Rebase
 def sync_pr(project_name, pr_num, pr_branch, pr_commit_id, project_html_url, project_gl, pr_html_url, rebase_flag):
-    branch = project_gl.branches.get(pr_branch)
-    if branch:
-        raise SystemError("PR Merge/Rebase: Branch/MR already exists for PR!")
+    try:
+        project_gl.branches.get(pr_branch)
+    except:
+        pass
+    else:
+        raise Exception("PR Merge/Rebase: PR branch already exists!")
 
     GITHUB_REMOTE_NAME = 'github'
     gh_remote = get_github_remote(project_html_url)
 
     git = Git(project_name)
 
-    print('Checking out to master branch...')
-    git.checkout('master')
+    print('Checking out to test_master branch...')
+    git.checkout('test_master')
 
     print('Adding the Github remote...')
     git.remote('add', GITHUB_REMOTE_NAME, gh_remote)
@@ -153,7 +158,7 @@ def sync_pr(project_name, pr_num, pr_branch, pr_commit_id, project_html_url, pro
     expected_commit_id = git.rev_parse('--short', 'HEAD')
 
     if not pr_commit_id.startswith(expected_commit_id):
-        raise SystemError("PR Commit SHA1 in workflow comment and user branch do not match!")
+        raise Exception("PR Commit SHA1 in workflow comment and user branch do not match!")
 
     if rebase_flag:
         #  Set the config parameters: Better be a espressif bot
@@ -161,8 +166,8 @@ def sync_pr(project_name, pr_num, pr_branch, pr_commit_id, project_html_url, pro
         repo.config_writer().set_value('user', 'name', os.environ['GIT_CONFIG_NAME']).release()
         repo.config_writer().set_value('user', 'email', os.environ['GIT_CONFIG_EMAIL']).release()
 
-        print('Rebasing with the latest master...')
-        git.rebase('master')
+        print('Rebasing with the latest test_master...')
+        git.rebase('test_master')
 
         commit = repo.head.commit
         new_cmt_msg = commit.message + '\nMerges ' + pr_html_url
@@ -221,6 +226,9 @@ def main():
     pr_jira_issue = pr_title[idx : -1]
     pr_body = event['pull_request']['body']
 
+    # NOTE: Modified for testing purpose
+    project_fullname = 'app-frameworks/actions-internal-test'
+
     # Gitlab setup and cloning internal codebase
     gl = setup_project(project_fullname)
     project_gl = gl.projects.get(project_fullname)
@@ -235,7 +243,7 @@ def main():
         print('Done with the workflow!')
         return
     else:
-        raise SystemError("Illegal program flow!")
+        raise Exception("Illegal program flow!")
 
     # Deleting local repo
     shutil.rmtree(project_name)
@@ -244,7 +252,7 @@ def main():
     time.sleep(15)
 
     print('Creating a merge request...')
-    mr = project_gl.mergerequests.create({'source_branch': pr_branch, 'target_branch': 'master', 'title': pr_title_desc})
+    mr = project_gl.mergerequests.create({'source_branch': pr_branch, 'target_branch': 'test_master', 'title': pr_title_desc})
 
     print('Updating merge request description...')
     mr_desc = '## Description \n' + pr_body + '\n ##### (Add more info here)' + '\n## Related'
